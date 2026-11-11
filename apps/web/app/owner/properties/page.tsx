@@ -5,7 +5,7 @@ import { formatDate, formatINR, type Property, type Unit } from '@rentora/shared
 import { useAuth } from '@/lib/auth';
 import { useQuery } from '@/lib/hooks';
 import { PageHead } from '@/components/Shell';
-import { AddPropertySheet, AddUnitSheet, MoveInSheet } from '@/components/StaffSheets';
+import { AddPropertySheet, AddUnitSheet, EditUnitSheet, MoveInSheet } from '@/components/StaffSheets';
 import { Avatar, BuildingArt, ErrorCard, Icon, InvoicePill, Skeleton } from '@/components/ui';
 
 type Filter = 'ALL' | 'OCCUPIED' | 'VACANT' | 'OVERDUE';
@@ -22,6 +22,7 @@ export default function Properties() {
   const [urgent, setUrgent] = useState(true);
   const [sheet, setSheet] = useState<'property' | 'unit' | null>(null);
   const [moveIn, setMoveIn] = useState<Unit | null>(null);
+  const [editing, setEditing] = useState<Unit | null>(null);
 
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
 
@@ -86,18 +87,19 @@ export default function Properties() {
         {list.length === 0 ? (
           <div className="card empty">{all.length === 0 && !debounced ? 'No units yet. Add your first unit to start tracking rent.' : `No units match${debounced ? ` “${debounced}”` : ''}.`}</div>
         ) : (
-          <div className="grid-cards">{list.map(u => <UnitCard key={u.id} u={u} onMoveIn={() => setMoveIn(u)} />)}</div>
+          <div className="grid-cards">{list.map(u => <UnitCard key={u.id} u={u} onMoveIn={() => setMoveIn(u)} onEdit={() => setEditing(u)} />)}</div>
         )}
       </>}
 
       {sheet === 'property' && <AddPropertySheet onClose={() => setSheet(null)} onDone={reload} />}
       {sheet === 'unit' && <AddUnitSheet propertyId={propertyId || undefined} onClose={() => setSheet(null)} onDone={reload} />}
+      {editing && <EditUnitSheet unit={editing} onClose={() => setEditing(null)} onDone={reload} />}
       {moveIn && <MoveInSheet unit={moveIn} onClose={() => setMoveIn(null)} onDone={reload} />}
     </>
   );
 }
 
-function UnitCard({ u, onMoveIn }: { u: Unit; onMoveIn: () => void }) {
+function UnitCard({ u, onMoveIn, onEdit }: { u: Unit; onMoveIn: () => void; onEdit: () => void }) {
   const inv = u.openInvoice;
   const lease = u.lease;
   return (
@@ -119,15 +121,18 @@ function UnitCard({ u, onMoveIn }: { u: Unit; onMoveIn: () => void }) {
             <div className="muted sm">Ready to let · deposit {formatINR(u.deposit)}</div></div>
         )}
       </div>
-      <div className="row between">
+      <div className="row between wrap">
         <div>
           <div className="eyebrow" style={inv?.status === 'OVERDUE' ? { color: 'var(--bad)' } : undefined}>{u.status === 'VACANT' ? 'Target rent' : inv ? 'Balance due' : 'Current rent'}</div>
           <div className="mid num" style={{ fontSize: 18 }}>{formatINR(inv?.amount ?? u.rent)}<span className="muted sm" style={{ fontWeight: 500 }}> /mo</span></div>
         </div>
+        <div className="row" style={{ gap: 6 }}>
+        <button className="btn btn-line btn-sm" onClick={onEdit} aria-label={`Edit ${u.name}`} title="Edit unit"><Icon name="edit" size={15} />Edit</button>
         {u.status === 'VACANT' ? (
           u.pendingApplications ? <Link className="btn btn-primary btn-sm" href={`/owner/applications?unitId=${u.id}`}><Icon name="users" size={15} />Review ({u.pendingApplications})</Link>
             : <button className="btn btn-primary btn-sm" onClick={onMoveIn}><Icon name="plus" size={15} />Add tenant</button>
         ) : <Link className="btn btn-soft btn-sm" href={`/owner/units/${u.id}`}><Icon name="file" size={15} />Lease & ledger</Link>}
+        </div>
       </div>
     </div>
   );
