@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  TENANT
+}
+
+enum UnitStatus {
+  VACANT
+  OCCUPIED
+}
+
+enum LeaseStatus {
+  ACTIVE
+  ENDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  BANK_TRANSFER
+  CASH
+  CHEQUE
+}
+
+enum TicketStatus {
+  OPEN
+  SCHEDULED
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Tone {
+  info
+  good
+  warn
+  bad
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  email        String?
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+
+  ownedProperties   Property[]           @relation("PropertyOwner")
+  managedProperties Property[]           @relation("PropertyManager")
+  leases            Lease[]
+  tickets           MaintenanceTicket[]
+  sentMessages      Message[]            @relation("MessageSender")
+  receivedMessages  Message[]            @relation("MessageRecipient")
+  notifications     Notification[]
+}
+
+model Property {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  city      String
+  ownerId   String
+  managerId String?
+  createdAt DateTime @default(now())
+
+  owner   User     @relation("PropertyOwner", fields: [ownerId], references: [id])
+  manager User?    @relation("PropertyManager", fields: [managerId], references: [id])
+  units   Unit[]
+  notices Notice[]
+
+  @@index([ownerId])
+  @@index([managerId])
+}
+
+model Unit {
+  id         String     @id @default(cuid())
+  propertyId String
+  name       String
+  rent       Int
+  deposit    Int
+  status     UnitStatus @default(VACANT)
+  createdAt  DateTime   @default(now())
+
+  property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  leases       Lease[]
+  tickets      MaintenanceTicket[]
+  applications Application[]
+  parcels      Parcel[]
+
+  @@unique([propertyId, name])
+}
+
+model Lease {
+  id            String      @id @default(cuid())
+  unitId        String
+  tenantId      String
+  startDate     DateTime
+  endDate       DateTime
+  rent          Int
+  deposit       Int
+  autopay       Boolean     @default(false)
+  coTenantNames String[]    @default([])
+  status        LeaseStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now())
+
+  unit     Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenant   User      @relation(fields: [tenantId], references: [id])
+  invoices Invoice[]
+
+  @@index([unitId, status])
+  @@index([tenantId, status])
+}
+
+/// One rent bill per lease per month. Status (due/overdue/paid) is derived from dueDate and paidAt.
+model Invoice {
+  id         String         @id @default(cuid())
+  leaseId    String
+  period     String // YYYY-MM
+  dueDate    DateTime
+  amount     Int
+  items      Json // [{ label, amount }]
+  paidAt     DateTime?
+  method     PaymentMethod?
+  reference  String?
+  remindedAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, period])
+  @@index([period])
+}
+
+model MaintenanceTicket {
+  id           String       @id @default(cuid())
+  unitId       String
+  createdById  String
+  title        String
+  description  String       @default("")
+  status       TicketStatus @default(OPEN)
+  scheduledFor DateTime?
+  assignee     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  unit      Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([unitId, status])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, readAt])
+}
+
+model Notice {
+  id         String    @id @default(cuid())
+  propertyId String
+  title      String
+  body       String
+  eventAt    DateTime?
+  createdAt  DateTime  @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, createdAt])
+}
+
+model Application {
+  id            String            @id @default(cuid())
+  unitId        String
+  name          String
+  phone         String
+  creditScore   Int
+  monthlyIncome Int
+  status        ApplicationStatus @default(PENDING)
+  createdAt     DateTime          @default(now())
+
+  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([unitId, status])
+}
+
+/// A delivery waiting in a building's smart locker.
+model Parcel {
+  id          String    @id @default(cuid())
+  unitId      String
+  carrier     String
+  locker      String
+  pin         String
+  deliveredAt DateTime  @default(now())
+  collectedAt DateTime?
+
+  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([unitId, collectedAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  tone      Tone      @default(info)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}

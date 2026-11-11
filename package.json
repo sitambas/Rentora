@@ -1,0 +1,24 @@
+{
+  "name": "rentora",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rentora rent management: API, web app and mobile app",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @rentora/api",
+    "dev:web": "npm run dev -w @rentora/web",
+    "dev:mobile": "npm --prefix apps/mobile run start",
+    "db:setup": "npm run db:setup -w @rentora/api",
+    "db:seed": "npm run db:seed -w @rentora/api",
+    "test": "npm test -w @rentora/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build -w @rentora/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
