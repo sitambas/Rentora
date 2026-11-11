@@ -23,7 +23,7 @@ npm install
 cp apps/api/.env.example apps/api/.env
 ```
 
-Edit `apps/api/.env`: set `DATABASE_URL` to your Postgres database and `JWT_SECRET` to a long random string (`openssl rand -hex 32`). Then create the tables and load demo data:
+Edit `apps/api/.env`: set `DATABASE_URL` to your Postgres database and `JWT_SECRET` to a long random string (`openssl rand -hex 32`). Then create the database tables:
 
 ```bash
 createdb rentora_app
@@ -53,17 +53,14 @@ cd apps/mobile && npm install && npx expo start
 
 Scan the QR code with Expo Go on your phone. The phone must be on the same Wi-Fi as your computer; the app finds the API on the computer running `expo start` automatically. To point it at another server, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` (see `.env.example`).
 
-### Demo accounts
+### First steps
 
-`npm run db:seed` resets the database and creates these accounts, all with password `demo1234`:
+The database starts empty.
 
-| Role | Mobile | Name |
-| --- | --- | --- |
-| Owner | 9876500001 | Alex Sharma |
-| Manager | 9876500002 | Priya Nair (manages Grandview and Westside) |
-| Tenant | 9876500010 | Elena Rostova (Grandview, Unit 304) |
-
-The login screens show one-tap demo buttons in development builds only.
+1. On the web app, choose **Create an account** and sign up as an owner.
+2. Add a property, then its units.
+3. Move a tenant into a unit. Rentora creates the tenant's account and shows a temporary password once; send it to them so they can sign in on the web or the mobile app.
+4. To give a manager access, have them sign up as a manager, then enter their mobile number on the property.
 
 ## Who can do what
 
@@ -103,7 +100,7 @@ Each active lease gets one invoice per month (`Invoice`, unique per lease and mo
 npm test
 ```
 
-Runs the API end-to-end tests against the database in `apps/api/.env.test` (create it from `.env.example` with a database name containing `test`; the tests wipe and re-seed it).
+Runs the API end-to-end tests against the database in `apps/api/.env.test` (create it from `.env.example` with a database name containing `test`). The tests wipe that database and fill it with sample data from `apps/api/prisma/test-data.ts`, which refuses to run against any database whose URL doesn't contain `test`.
 
 ```bash
 npm run typecheck

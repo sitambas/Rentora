@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { homeFor, useAuth } from '@/lib/auth';
 import { Icon, LogoMark } from '@/components/ui';
 
-// Accounts created by `npm run db:seed`; shown only in development builds.
-const DEMO = process.env.NODE_ENV !== 'production'
-  ? [{ label: 'Owner (Alex S.)', phone: '9876500001' }, { label: 'Manager (Priya N.)', phone: '9876500002' }, { label: 'Tenant (Unit 304)', phone: '9876500010' }]
-  : [];
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -21,13 +17,12 @@ export default function Login() {
 
   useEffect(() => { if (user) router.replace(homeFor(user.role)); }, [user, router]);
 
-  async function submit(e: FormEvent, creds?: { phone: string; password: string }) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    const c = creds ?? { phone, password };
-    if (!c.phone.trim() || !c.password) { setError('Enter your mobile number and password.'); return; }
+    if (!phone.trim() || !password) { setError('Enter your mobile number and password.'); return; }
     setBusy(true); setError('');
     try {
-      const u = await login(c.phone, c.password);
+      const u = await login(phone, password);
       router.replace(homeFor(u.role));
     } catch (err) {
       setError((err as Error).message);
@@ -57,15 +52,6 @@ export default function Login() {
         {error && <div className="err" role="alert">{error}</div>}
         <button className="btn btn-primary btn-block" style={{ height: 48 }} disabled={busy}>{busy ? 'Signing in…' : <>Sign in <Icon name="arrow" size={17} /></>}</button>
         <div className="muted sm" style={{ textAlign: 'center' }}>Tenants get their login from their landlord or manager.</div>
-        {DEMO.length > 0 && <>
-          <div className="divider">DEMO ACCOUNTS · PASSWORD demo1234</div>
-          <div className="row wrap" style={{ justifyContent: 'center', gap: 8 }}>
-            {DEMO.map(d => (
-              <button key={d.phone} type="button" className="demo-chip" disabled={busy}
-                onClick={e => { setPhone(d.phone); setPassword('demo1234'); submit(e, { phone: d.phone, password: 'demo1234' }); }}>{d.label}</button>
-            ))}
-          </div>
-        </>}
         <div className="row" style={{ justifyContent: 'center', gap: 6 }}>
           <span className="muted">Own or manage property?</span><Link href="/signup" className="link">Create an account</Link>
         </div>

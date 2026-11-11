@@ -13,7 +13,6 @@
     "dev:web": "npm run dev -w @rentora/web",
     "dev:mobile": "npm --prefix apps/mobile run start",
     "db:setup": "npm run db:setup -w @rentora/api",
-    "db:seed": "npm run db:seed -w @rentora/api",
     "test": "npm test -w @rentora/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build -w @rentora/web"

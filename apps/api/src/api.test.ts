@@ -24,7 +24,7 @@ async function call(method: string, path: string, opts: { as?: string; body?: un
 before(async () => {
   if (!process.env.DATABASE_URL?.includes('test')) throw new Error('Tests must run against a test database (DATABASE_URL should contain "test").');
   execSync('npx prisma migrate deploy', { stdio: 'ignore', env: process.env });
-  execSync('npx tsx prisma/seed.ts', { stdio: 'ignore', env: process.env });
+  execSync('npx tsx prisma/test-data.ts', { stdio: 'ignore', env: process.env });
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   for (const [who, phone] of [['owner', '9876500001'], ['manager', '9876500002'], ['tenant', '9876500010']]) {

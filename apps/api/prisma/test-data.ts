@@ -1,4 +1,4 @@
-// Demo data for local development. Wipes the database it points at, so never run it against production.
+// Sample data for the API tests (src/api.test.ts). Wipes the database it points at, so it only runs against a test database.
 import { PrismaClient, type Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { periodOf, shiftPeriod } from '@rentora/shared';
@@ -16,7 +16,7 @@ const day = (offset: number, base = new Date()) => { const d = new Date(base); d
 const dueDate = (period: string) => { const [y, m] = period.split('-').map(Number); return new Date(y, m - 1, 5, 12); };
 
 async function main() {
-  if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed a production database.');
+  if (!process.env.DATABASE_URL?.includes('test')) throw new Error('Refusing to load test data: DATABASE_URL must point at a test database.');
   await db.$transaction([
     db.notification.deleteMany(), db.message.deleteMany(), db.parcel.deleteMany(), db.application.deleteMany(),
     db.notice.deleteMany(), db.maintenanceTicket.deleteMany(), db.invoice.deleteMany(), db.lease.deleteMany(),

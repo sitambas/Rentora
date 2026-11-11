@@ -7,9 +7,8 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "NODE_ENV=production tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "db:setup": "prisma migrate dev --name init && npm run db:seed",
+    "db:setup": "prisma migrate dev",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "test": "NODE_ENV=test tsx --env-file=.env.test --test src/api.test.ts"
   },
   "dependencies": {

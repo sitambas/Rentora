@@ -4,10 +4,8 @@ import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
-import { Button, Field, Icon, Row, T, useColors } from '@/components/ui';
+import { Button, Field, Icon, T, useColors } from '@/components/ui';
 
-// Accounts created by `npm run db:seed` in the API. Shown in development builds only.
-const DEMO = __DEV__ ? [['Owner', '9876500001'], ['Manager', '9876500002'], ['Tenant', '9876500010']] : [];
 
 export default function Login() {
   const c = useColors();
@@ -21,11 +19,11 @@ export default function Login() {
 
   if (user) return <Redirect href="/" />;
 
-  const submit = async (p = phone, pw = password) => {
-    if (!p.trim() || !pw) { setError('Enter your mobile number and password.'); return; }
+  const submit = async () => {
+    if (!phone.trim() || !password) { setError('Enter your mobile number and password.'); return; }
     setBusy(true); setError('');
     try {
-      const u = await login(p, pw);
+      const u = await login(phone, password);
       router.replace(u.role === 'TENANT' ? '/home' : '/overview');
     } catch (e) {
       setError((e as Error).message);
@@ -55,15 +53,7 @@ export default function Login() {
           {!!error && <T v="sm" color={c.bad}>{error}</T>}
           <Button title={busy ? 'Signing in…' : 'Sign in'} icon="arrow-forward" onPress={() => submit()} disabled={busy} />
           <T v="sm" style={{ textAlign: 'center' }}>Tenants get their login from their landlord or manager. Owners can sign up on the Rentora website.</T>
-          {DEMO.length > 0 && (
-            <View style={{ gap: 8, marginTop: 8 }}>
-              <T v="eyebrow" style={{ textAlign: 'center' }}>Demo accounts · password demo1234</T>
-              <Row style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
-                {DEMO.map(([label, p]) => <Button key={p} title={label} kind="soft" small disabled={busy} onPress={() => { setPhone(p); setPassword('demo1234'); submit(p, 'demo1234'); }} />)}
-              </Row>
-              <T v="sm" style={{ textAlign: 'center' }}>Server: {API_URL}</T>
-            </View>
-          )}
+          {__DEV__ && <T v="sm" style={{ textAlign: 'center' }}>Server: {API_URL}</T>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
