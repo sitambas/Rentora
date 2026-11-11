@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { formatINR, normalizePhone, periodLabel, periodOf } from '@rentora/shared';
+import { ID_TYPES, formatINR, normalizePhone, periodLabel, periodOf, type IdType } from '@rentora/shared';
 import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { hashPassword, isStaff, me, requireRole, tempPassword } from '../lib/auth';
@@ -14,6 +14,9 @@ const staff = requireRole('OWNER', 'MANAGER');
 const METHODS = ['UPI', 'CARD', 'NETBANKING', 'BANK_TRANSFER', 'CASH', 'CHEQUE'] as const;
 
 /* ---------- leases ---------- */
+
+/** Optional free text: blank becomes null. */
+const optionalText = (max: number) => z.string().trim().max(max).nullable().optional().transform(v => v || null);
 
 const phoneField = z.string().transform((v, ctx) => {
   const p = normalizePhone(v);
@@ -31,11 +34,37 @@ leases.post('/', staff, handle(async req => {
     months: z.coerce.number().int().min(1).max(60).default(11),
     rent: z.coerce.number().int().positive(),
     deposit: z.coerce.number().int().min(0),
-    coTenantNames: z.array(z.string().trim().min(1)).max(4).optional()
+    coTenantNames: z.array(z.string().trim().min(1)).max(4).optional(),
+    occupants: z.preprocess(v => (v === '' || v === null ? undefined : v), z.coerce.number().int().min(1, 'At least 1 person lives here.').max(20).optional()),
+    notes: optionalText(1000),
+    dateOfBirth: z.union([z.literal(''), z.null(), z.coerce.date().max(new Date(), 'Date of birth can’t be in the future.')]).optional()
+      .transform(v => (v instanceof Date ? v : null)),
+    occupation: optionalText(100),
+    employer: optionalText(100),
+    permanentAddress: optionalText(300),
+    idType: z.enum(Object.keys(ID_TYPES) as [IdType, ...IdType[]]).nullable().optional(),
+    idNumber: optionalText(30).transform(v => v?.replace(/\s/g, '').toUpperCase() ?? null),
+    emergencyName: optionalText(100),
+    emergencyRelation: optionalText(50),
+    emergencyPhone: z.string().optional().nullable().transform((v, ctx) => {
+      if (!v?.trim()) return null;
+      const p = normalizePhone(v);
+      if (!p) ctx.addIssue({ code: 'custom', message: 'Enter a 10-digit mobile number for the emergency contact.' });
+      return p;
+    })
+  }).superRefine((b, ctx) => {
+    if (b.idNumber && !b.idType) ctx.addIssue({ code: 'custom', message: 'Choose the type of ID.' });
+    if (b.idType === 'AADHAAR' && b.idNumber && !/^\d{12}$/.test(b.idNumber)) ctx.addIssue({ code: 'custom', message: 'An Aadhaar number has 12 digits.' });
+    if (b.idType === 'PAN' && b.idNumber && !/^[A-Z]{5}\d{4}[A-Z]$/.test(b.idNumber)) ctx.addIssue({ code: 'custom', message: 'A PAN looks like ABCDE1234F.' });
+    if (b.emergencyPhone && b.emergencyPhone === b.phone) ctx.addIssue({ code: 'custom', message: 'The emergency contact needs a different number from the tenant.' });
   }), req.body);
   const unit = await db.unit.findFirst({ where: { id: body.unitId, property: propertyScope(me(req)) } });
   if (!unit) throw notFound('Unit');
-  const r = await moveIn(body, hashPassword, tempPassword);
+  const { dateOfBirth, occupation, employer, permanentAddress, idType, idNumber, emergencyName, emergencyRelation, emergencyPhone, ...lease } = body;
+  const r = await moveIn({
+    ...lease,
+    profile: { dateOfBirth, occupation, employer, permanentAddress, idType: idNumber ? idType : null, idNumber, emergencyName, emergencyRelation, emergencyPhone }
+  }, hashPassword, tempPassword);
   return { leaseId: r.lease.id, tenantId: r.tenant.id, tempPassword: r.tempPassword };
 }));
 

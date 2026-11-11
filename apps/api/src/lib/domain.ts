@@ -1,6 +1,6 @@
 // Access scoping, record → API shape mapping, and the business actions several routes share.
 import type { Prisma, Role } from '@prisma/client';
-import { invoiceStatus, periodOf, type Invoice, type InvoiceItem, type Lease, type Ticket, type Unit } from '@rentora/shared';
+import { invoiceStatus, maskId, periodOf, type IdType, type Invoice, type InvoiceItem, type Lease, type TenantDetails, type Ticket, type Unit } from '@rentora/shared';
 import { db } from '../db';
 import type { AuthUser } from './auth';
 import { conflict, forbidden, notFound } from './http';
@@ -75,7 +75,23 @@ export const toLease = (l: LeaseRow): Lease => ({
   deposit: l.deposit,
   autopay: l.autopay,
   coTenantNames: l.coTenantNames,
-  tenant: { id: l.tenant.id, name: l.tenant.name, phone: l.tenant.phone }
+  occupants: l.occupants,
+  notes: l.notes,
+  tenant: { id: l.tenant.id, name: l.tenant.name, phone: l.tenant.phone },
+  tenantDetails: tenantDetails(l.tenant, false)
+});
+
+export const tenantDetails = (t: LeaseRow['tenant'], fullId: boolean): TenantDetails => ({
+  email: t.email,
+  dateOfBirth: t.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+  occupation: t.occupation,
+  employer: t.employer,
+  permanentAddress: t.permanentAddress,
+  idType: (t.idType as IdType | null) ?? null,
+  idNumber: t.idNumber ? (fullId ? t.idNumber : maskId(t.idNumber)) : null,
+  emergencyName: t.emergencyName,
+  emergencyRelation: t.emergencyRelation,
+  emergencyPhone: t.emergencyPhone
 });
 
 export const unitInclude = {
@@ -139,8 +155,11 @@ export async function ensureInvoice(lease: { id: string; rent: number; startDate
   if (lease.startDate > monthEnd || lease.endDate < monthStart) return false;
   const lineItems = items ?? [{ label: 'Rent', amount: lease.rent }];
   const amount = lineItems.reduce((a, i) => a + i.amount, 0);
+  // A tenant who moves in after the 5th pays their first month on move-in day, not on a date already gone.
+  let dueDate = dueDateFor(period);
+  if (lease.startDate > dueDate) { dueDate = new Date(lease.startDate); dueDate.setHours(12, 0, 0, 0); }
   const res = await db.invoice.createMany({
-    data: [{ leaseId: lease.id, period, dueDate: dueDateFor(period), amount, items: lineItems as unknown as Prisma.InputJsonValue }],
+    data: [{ leaseId: lease.id, period, dueDate, amount, items: lineItems as unknown as Prisma.InputJsonValue }],
     skipDuplicates: true
   });
   return res.count > 0;
@@ -150,9 +169,15 @@ export async function ensureInvoice(lease: { id: string; rent: number; startDate
  * Moves a tenant into a vacant unit: finds or creates the tenant account, opens the lease,
  * marks the unit occupied and bills the first month. Returns a temporary password when an account was created.
  */
+export type TenantProfile = Partial<{
+  dateOfBirth: Date | null; occupation: string | null; employer: string | null; permanentAddress: string | null;
+  idType: string | null; idNumber: string | null; emergencyName: string | null; emergencyRelation: string | null; emergencyPhone: string | null;
+}>;
+
 export async function moveIn(input: {
   unitId: string; name: string; phone: string; email?: string | null; password?: string;
   startDate: Date; months: number; rent: number; deposit: number; coTenantNames?: string[];
+  occupants?: number; notes?: string | null; profile?: TenantProfile;
 }, hash: (pw: string) => Promise<string>, makePassword: () => string) {
   const unit = await db.unit.findUnique({ where: { id: input.unitId }, include: { property: true } });
   if (!unit) throw notFound('Unit');
@@ -165,9 +190,13 @@ export async function moveIn(input: {
   if (!tenant) {
     temp = input.password ?? makePassword();
     tenant = await db.user.create({
-      data: { name: input.name, phone: input.phone, email: input.email ?? null, role: 'TENANT', passwordHash: await hash(temp) }
+      data: { name: input.name, phone: input.phone, email: input.email ?? null, role: 'TENANT', passwordHash: await hash(temp), ...input.profile }
     });
     if (input.password) temp = null;
+  } else if (input.profile || input.email) {
+    // A returning tenant: keep their account, refresh whatever details were given this time.
+    const given = Object.fromEntries(Object.entries({ email: input.email, ...input.profile }).filter(([, v]) => v != null && v !== ''));
+    if (Object.keys(given).length) tenant = await db.user.update({ where: { id: tenant.id }, data: given });
   }
 
   const endDate = new Date(input.startDate);
@@ -178,7 +207,8 @@ export async function moveIn(input: {
     const l = await tx.lease.create({
       data: {
         unitId: unit.id, tenantId: tenant!.id, startDate: input.startDate, endDate,
-        rent: input.rent, deposit: input.deposit, coTenantNames: input.coTenantNames ?? []
+        rent: input.rent, deposit: input.deposit, coTenantNames: input.coTenantNames ?? [],
+        occupants: input.occupants ?? 1 + (input.coTenantNames?.length ?? 0), notes: input.notes ?? null
       }
     });
     await tx.unit.update({ where: { id: unit.id }, data: { status: 'OCCUPIED', rent: input.rent, deposit: input.deposit } });

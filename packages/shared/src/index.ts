@@ -66,6 +66,23 @@ export interface Property {
   manager: Ref | null;
 }
 
+export const ID_TYPES = { AADHAAR: 'Aadhaar', PAN: 'PAN card', PASSPORT: 'Passport', DRIVING_LICENCE: 'Driving licence', VOTER_ID: 'Voter ID' } as const;
+export type IdType = keyof typeof ID_TYPES;
+
+/** What the owner or manager records about a tenant. Lists show `idNumber` masked; the unit page shows it in full. */
+export interface TenantDetails {
+  email: string | null;
+  dateOfBirth: string | null;
+  occupation: string | null;
+  employer: string | null;
+  permanentAddress: string | null;
+  idType: IdType | null;
+  idNumber: string | null;
+  emergencyName: string | null;
+  emergencyRelation: string | null;
+  emergencyPhone: string | null;
+}
+
 export interface Lease {
   id: string;
   startDate: string;
@@ -74,7 +91,16 @@ export interface Lease {
   deposit: number;
   autopay: boolean;
   coTenantNames: string[];
+  occupants: number;
+  notes: string | null;
   tenant: Ref & { phone: string };
+  tenantDetails: TenantDetails;
+}
+
+/** Shows only the last 4 characters of an ID number. */
+export function maskId(id: string): string {
+  const clean = id.replace(/\s/g, '');
+  return clean.length <= 4 ? clean : '•'.repeat(clean.length - 4) + clean.slice(-4);
 }
 
 export interface Unit {

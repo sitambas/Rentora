@@ -1,9 +1,9 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { PAYMENT_METHODS, formatDate, formatINR, periodLabel, type Invoice, type PaymentMethod, type Property, type Unit } from '@rentora/shared';
+import { ID_TYPES, PAYMENT_METHODS, formatDate, formatINR, periodLabel, type IdType, type Invoice, type PaymentMethod, type Property, type Unit } from '@rentora/shared';
 import { api } from '@/lib/api';
 import { useAction, useQuery } from '@/lib/hooks';
-import { Field, Sheet, Skeleton, useToast } from './ui';
+import { Field, Icon, Sheet, Skeleton, useToast } from './ui';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -139,44 +139,131 @@ export function TempPasswordNote({ phone, password }: { phone: string; password:
   );
 }
 
-export function MoveInSheet({ unit, onClose, onDone }: { unit: Unit; onClose: () => void; onDone: () => void }) {
+const BLANK_TENANT = {
+  name: '', phone: '', email: '', dateOfBirth: '', occupation: '', employer: '', permanentAddress: '',
+  idType: '' as IdType | '', idNumber: '', emergencyName: '', emergencyRelation: '', emergencyPhone: '',
+  startDate: '', months: '11', rent: '', deposit: '', occupants: '1', notes: ''
+};
+
+/** Adds a tenant to a unit with their full details. Pass `unit` to fix the unit; leave it out to choose a vacant one. */
+export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const { busy, run } = useAction();
-  const [f, setF] = useState({ name: '', phone: '', email: '', coTenant: '', startDate: today(), months: '11', rent: String(unit.rent), deposit: String(unit.deposit) });
+  const vacant = useQuery<Unit[]>(unit ? null : '/units?status=VACANT');
+  const [unitId, setUnitId] = useState(unit?.id ?? '');
+  const [f, setF] = useState({ ...BLANK_TENANT, startDate: today(), rent: unit ? String(unit.rent) : '', deposit: unit ? String(unit.deposit) : '' });
+  const [coTenants, setCoTenants] = useState<string[]>([]);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<{ phone: string; tempPassword: string | null } | null>(null);
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const set = (k: keyof typeof f, digits = false) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: digits ? e.target.value.replace(/\D/g, '') : e.target.value });
+
+  const options = vacant.data ?? [];
+  const chosen = unit ?? options.find(u => u.id === unitId);
+  const pickUnit = (id: string) => {
+    const u = options.find(x => x.id === id);
+    setUnitId(id);
+    if (u) setF(prev => ({ ...prev, rent: String(u.rent), deposit: String(u.deposit) }));
+  };
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (!chosen) { setErr('Choose the unit the tenant is moving into.'); return; }
     run(async () => {
+      const names = coTenants.map(n => n.trim()).filter(Boolean);
       const r = await api<{ tempPassword: string | null }>('/leases', {
-        body: { unitId: unit.id, name: f.name, phone: f.phone, email: f.email || null, startDate: f.startDate, months: f.months, rent: f.rent, deposit: f.deposit,
-          coTenantNames: f.coTenant.trim() ? [f.coTenant.trim()] : [] }
+        body: {
+          unitId: chosen.id, name: f.name, phone: f.phone, email: f.email.trim() || null,
+          dateOfBirth: f.dateOfBirth || null, occupation: f.occupation, employer: f.employer, permanentAddress: f.permanentAddress,
+          idType: f.idType || null, idNumber: f.idNumber, emergencyName: f.emergencyName, emergencyRelation: f.emergencyRelation, emergencyPhone: f.emergencyPhone,
+          startDate: f.startDate, months: f.months, rent: f.rent, deposit: f.deposit, occupants: f.occupants || undefined, notes: f.notes,
+          coTenantNames: names
+        }
       });
-      toast(`${f.name} moved in to ${unit.name}`);
+      toast(`${f.name} moved in to ${chosen.name}`);
       onDone();
       if (r.tempPassword) setDone({ phone: f.phone, tempPassword: r.tempPassword }); else onClose();
     }, setErr);
   };
+
+  const input = (k: keyof typeof f, id: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}, digits = false) =>
+    <div className="input"><input id={id} value={f[k]} onChange={set(k, digits)} {...props} /></div>;
+
   return (
-    <Sheet title={`Add tenant · ${unit.name}`} onClose={onClose}>
+    <Sheet title={unit ? `Add tenant · ${unit.name}` : 'Add a tenant'} onClose={onClose}>
       {done?.tempPassword ? <><TempPasswordNote phone={done.phone} password={done.tempPassword} /><button className="btn btn-primary" onClick={onClose}>Done</button></> : (
-        <form className="stack" onSubmit={submit}>
-          <Field label="Tenant’s full name" id="mn"><div className="input"><input id="mn" value={f.name} onChange={set('name')} /></div></Field>
+        !unit && !vacant.data ? <Skeleton /> : !unit && options.length === 0 ? (
+          <div className="empty">Every unit has a tenant. Add a unit on the Properties page first.</div>
+        ) : (
+        <form className="stack" onSubmit={submit} noValidate>
+          {!unit && (
+            <Field label="Unit" id="tu"><div className="input"><select id="tu" value={unitId} onChange={e => pickUnit(e.target.value)}>
+              <option value="">Choose a vacant unit</option>
+              {options.map(u => <option key={u.id} value={u.id}>{u.property.name} · {u.name} · {formatINR(u.rent)}/mo</option>)}
+            </select></div></Field>
+          )}
+
+          <div className="eyebrow">Tenant</div>
+          <Field label="Full name" id="tn">{input('name', 'tn', { autoComplete: 'off' })}</Field>
           <div className="grid2">
-            <Field label="Mobile" id="mp"><div className="input"><input id="mp" inputMode="tel" value={f.phone} onChange={set('phone')} /></div></Field>
-            <Field label="Email (optional)" id="me"><div className="input"><input id="me" type="email" value={f.email} onChange={set('email')} /></div></Field>
+            <Field label="Mobile" id="tp" hint="Their Rentora login.">{input('phone', 'tp', { inputMode: 'tel', placeholder: '98765 43210' })}</Field>
+            <Field label="Email" id="te" hint="Optional">{input('email', 'te', { type: 'email' })}</Field>
+            <Field label="Date of birth" id="td" hint="Optional">{input('dateOfBirth', 'td', { type: 'date', max: today() })}</Field>
+            <Field label="Occupation" id="to" hint="Optional">{input('occupation', 'to', { placeholder: 'Software engineer' })}</Field>
           </div>
-          <Field label="Co-tenant (optional)" id="mc"><div className="input"><input id="mc" placeholder="Name of a roommate on the lease" value={f.coTenant} onChange={set('coTenant')} /></div></Field>
+          <Field label="Employer or college" id="tw" hint="Optional">{input('employer', 'tw')}</Field>
+          <Field label="Permanent address" id="ta" hint="Optional">
+            <textarea id="ta" className="input" rows={2} value={f.permanentAddress} onChange={set('permanentAddress')} />
+          </Field>
+
+          <div className="eyebrow">ID proof</div>
           <div className="grid2">
-            <Field label="Move-in date" id="ms"><div className="input"><input id="ms" type="date" value={f.startDate} onChange={set('startDate')} /></div></Field>
-            <Field label="Lease length (months)" id="mm"><div className="input"><input id="mm" inputMode="numeric" value={f.months} onChange={set('months')} /></div></Field>
-            <Field label="Rent / month (₹)" id="mr"><div className="input"><input id="mr" inputMode="numeric" value={f.rent} onChange={set('rent')} /></div></Field>
-            <Field label="Deposit (₹)" id="md"><div className="input"><input id="md" inputMode="numeric" value={f.deposit} onChange={set('deposit')} /></div></Field>
+            <Field label="ID type" id="ti"><div className="input"><select id="ti" value={f.idType} onChange={set('idType')}>
+              <option value="">None</option>
+              {(Object.entries(ID_TYPES) as [IdType, string][]).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select></div></Field>
+            <Field label="ID number" id="tx">{input('idNumber', 'tx', { disabled: !f.idType, placeholder: f.idType === 'AADHAAR' ? '1234 5678 9012' : f.idType === 'PAN' ? 'ABCDE1234F' : '', autoComplete: 'off' })}</Field>
           </div>
-          {err && <div className="err">{err}</div>}
-          <button className="btn btn-primary btn-block" disabled={busy}>Create lease</button>
+
+          <div className="eyebrow">Emergency contact</div>
+          <div className="grid2">
+            <Field label="Name" id="en" hint="Optional">{input('emergencyName', 'en')}</Field>
+            <Field label="Relation" id="er" hint="Optional">{input('emergencyRelation', 'er', { placeholder: 'Father' })}</Field>
+          </div>
+          <Field label="Mobile" id="ep" hint="Optional">{input('emergencyPhone', 'ep', { inputMode: 'tel' })}</Field>
+
+          <div className="eyebrow">Lease</div>
+          <div className="grid2">
+            <Field label="Move-in date" id="ms">{input('startDate', 'ms', { type: 'date' })}</Field>
+            <Field label="Lease length (months)" id="mm">{input('months', 'mm', { inputMode: 'numeric' }, true)}</Field>
+            <Field label="Rent / month (₹)" id="mr">{input('rent', 'mr', { inputMode: 'numeric' }, true)}</Field>
+            <Field label="Deposit (₹)" id="md">{input('deposit', 'md', { inputMode: 'numeric' }, true)}</Field>
+          </div>
+          <Field label="People living in the unit" id="mo">{input('occupants', 'mo', { inputMode: 'numeric' }, true)}</Field>
+
+          <div className="field">
+            <label>Co-tenants on the lease</label>
+            {coTenants.map((n, i) => (
+              <div key={i} className="row" style={{ gap: 6 }}>
+                <div className="input"><input aria-label={`Co-tenant ${i + 1} name`} value={n} placeholder="Full name"
+                  onChange={e => setCoTenants(c => c.map((x, j) => (j === i ? e.target.value : x)))} /></div>
+                <button type="button" className="icon-btn" aria-label={`Remove co-tenant ${i + 1}`} onClick={() => setCoTenants(c => c.filter((_, j) => j !== i))}><Icon name="x" size={16} /></button>
+              </div>
+            ))}
+            {coTenants.length < 4 && (
+              <button type="button" className="btn btn-line btn-sm" style={{ alignSelf: 'flex-start' }}
+                onClick={() => { setCoTenants(c => [...c, '']); setF(prev => ({ ...prev, occupants: String(Math.max(Number(prev.occupants) || 1, coTenants.length + 2)) })); }}>
+                <Icon name="plus" size={15} />Add co-tenant</button>
+            )}
+          </div>
+          <Field label="Notes" id="mn" hint="Optional. Only you and your managers see this.">
+            <textarea id="mn" className="input" rows={2} placeholder="Pets, parking slot, police verification status…" value={f.notes} onChange={set('notes')} />
+          </Field>
+
+          {err && <div className="err" role="alert">{err}</div>}
+          <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Adding…' : 'Add tenant & create lease'}</button>
         </form>
+        )
       )}
     </Sheet>
   );

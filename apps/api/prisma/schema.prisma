@@ -61,6 +61,17 @@ model User {
   role         Role
   createdAt    DateTime @default(now())
 
+  // Tenant profile, filled in by the owner or manager when they add a tenant.
+  dateOfBirth       DateTime?
+  occupation        String?
+  employer          String?
+  permanentAddress  String?
+  idType            String?
+  idNumber          String?
+  emergencyName     String?
+  emergencyRelation String?
+  emergencyPhone    String?
+
   ownedProperties   Property[]           @relation("PropertyOwner")
   managedProperties Property[]           @relation("PropertyManager")
   leases            Lease[]
@@ -116,6 +127,8 @@ model Lease {
   deposit       Int
   autopay       Boolean     @default(false)
   coTenantNames String[]    @default([])
+  occupants     Int         @default(1)
+  notes         String?
   status        LeaseStatus @default(ACTIVE)
   createdAt     DateTime    @default(now())
 

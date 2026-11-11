@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { me, requireRole } from '../lib/auth';
 import { badRequest, conflict, forbidden, handle, notFound, parse } from '../lib/http';
-import { invoiceInclude, propertyScope, toInvoice, toTicket, toUnit, ticketInclude, unitForUser, unitInclude } from '../lib/domain';
+import { invoiceInclude, propertyScope, tenantDetails, toInvoice, toTicket, toUnit, ticketInclude, unitForUser, unitInclude } from '../lib/domain';
 
 export const properties = Router();
 export const units = Router();
@@ -103,7 +103,11 @@ units.get('/:id', staff, handle(async req => {
     db.invoice.findMany({ where: { lease: { unitId: unit.id } }, include: invoiceInclude, orderBy: { dueDate: 'desc' }, take: 12 }),
     db.maintenanceTicket.findMany({ where: { unitId: unit.id }, include: ticketInclude, orderBy: { createdAt: 'desc' }, take: 10 })
   ]);
-  return { ...toUnit(unit), invoices: invoices.map(i => toInvoice(i)), tickets: tickets.map(toTicket) };
+  const out = toUnit(unit);
+  // Staff opening one unit see the tenant's full ID number; lists show it masked.
+  const tenant = unit.leases[0]?.tenant;
+  if (out.lease && tenant) out.lease.tenantDetails = tenantDetails(tenant, true);
+  return { ...out, invoices: invoices.map(i => toInvoice(i)), tickets: tickets.map(toTicket) };
 }));
 
 const unitBody = z.object({

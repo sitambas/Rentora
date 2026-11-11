@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { use, useState } from 'react';
-import { formatDate, formatINR, periodLabel, type Invoice, type Ticket, type Unit } from '@rentora/shared';
+import { ID_TYPES, formatDate, formatINR, periodLabel, type Invoice, type Lease, type Ticket, type Unit } from '@rentora/shared';
 import { api } from '@/lib/api';
 import { useAction, useQuery } from '@/lib/hooks';
 import { EditUnitSheet, MoveInSheet, RecordPaymentSheet, RenewSheet } from '@/components/StaffSheets';
@@ -54,6 +54,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
                   <div key={k} className="row between"><span className="muted">{k}</span><b className="num">{v}</b></div>
                 ))}
               </div>
+              <TenantDetailsCard lease={lease} />
               <div className="row wrap">
                 <button className="btn btn-line btn-sm" onClick={() => setSheet('renew')}><Icon name="file" size={15} />Renew lease</button>
                 <button className="btn btn-danger btn-sm" onClick={() => setSheet('end')}>End lease</button>
@@ -118,5 +119,28 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
         </Sheet>
       )}
     </>
+  );
+}
+
+function TenantDetailsCard({ lease }: { lease: Lease }) {
+  const d = lease.tenantDetails;
+  const rows: [string, string | null][] = [
+    ['Email', d.email],
+    ['Date of birth', d.dateOfBirth && formatDate(d.dateOfBirth)],
+    ['Occupation', [d.occupation, d.employer].filter(Boolean).join(' at ') || null],
+    ['Permanent address', d.permanentAddress],
+    ['ID proof', d.idType && `${ID_TYPES[d.idType]} · ${d.idNumber ?? ''}`],
+    ['Emergency contact', d.emergencyName && `${d.emergencyName}${d.emergencyRelation ? ` (${d.emergencyRelation})` : ''}${d.emergencyPhone ? ` · ${d.emergencyPhone}` : ''}`],
+    ['People in the unit', String(lease.occupants)],
+    ['Notes', lease.notes]
+  ];
+  const shown = rows.filter((r): r is [string, string] => !!r[1]);
+  return (
+    <details className="card flat" style={{ gap: 8 }}>
+      <summary className="row between" style={{ cursor: 'pointer' }}><b>Tenant details</b><span className="muted sm">{shown.length} recorded</span></summary>
+      <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+        {shown.map(([k, v]) => <div key={k} className="row between" style={{ alignItems: 'flex-start', gap: 16 }}><span className="muted">{k}</span><span style={{ textAlign: 'right', overflowWrap: 'anywhere' }}>{v}</span></div>)}
+      </div>
+    </details>
   );
 }

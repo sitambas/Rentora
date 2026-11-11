@@ -144,3 +144,41 @@ test('staff edit a unit; duplicate names and outsiders are refused', async () =>
   assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'manager', body: { rent: 1 } })).status, 403);
   assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'tenant', body: { rent: 1 } })).status, 403);
 });
+
+test('adding a tenant stores their details; ID is masked in lists and full on the unit page', async () => {
+  const { data: props } = await call('GET', '/properties', { as: 'owner' });
+  const { data: unit } = await call('POST', '/units', { as: 'owner', body: { propertyId: props[0].id, name: 'Unit 909', rent: 30000 } });
+  const base = { unitId: unit.id, name: 'Kavya Iyer', phone: '98765 00077', startDate: '2026-12-20', months: 11, rent: 30000, deposit: 60000 };
+
+  const badAadhaar = await call('POST', '/leases', { as: 'owner', body: { ...base, idType: 'AADHAAR', idNumber: '1234' } });
+  assert.equal(badAadhaar.status, 400);
+  assert.match(badAadhaar.data.error, /12 digits/);
+  const samePhone = await call('POST', '/leases', { as: 'owner', body: { ...base, emergencyPhone: '9876500077' } });
+  assert.equal(samePhone.status, 400);
+
+  const ok = await call('POST', '/leases', {
+    as: 'owner',
+    body: {
+      ...base, email: 'kavya@example.com', dateOfBirth: '1996-04-18', occupation: 'Designer', employer: 'Studio Nine',
+      permanentAddress: '12 Lake Road, Kochi', idType: 'AADHAAR', idNumber: '1234 5678 9012',
+      emergencyName: 'Ravi Iyer', emergencyRelation: 'Father', emergencyPhone: '+91 98450 11111',
+      coTenantNames: ['Meera Iyer'], notes: 'Two-wheeler parking', occupants: ''
+    }
+  });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.ok(ok.data.tempPassword);
+
+  const { data: listed } = await call('GET', '/units?status=OCCUPIED&q=Kavya', { as: 'owner' });
+  const lease = listed[0].lease;
+  assert.equal(lease.tenantDetails.idNumber, '••••••••9012');
+  assert.equal(lease.occupants, 2, 'tenant plus one co-tenant');
+  assert.equal(lease.notes, 'Two-wheeler parking');
+
+  const { data: detail } = await call('GET', `/units/${unit.id}`, { as: 'owner' });
+  assert.equal(detail.openInvoice.dueDate.slice(0, 10), '2026-12-20', 'a mid-month move-in is billed on move-in day, not the 5th');
+  assert.deepEqual(detail.lease.tenantDetails, {
+    email: 'kavya@example.com', dateOfBirth: '1996-04-18', occupation: 'Designer', employer: 'Studio Nine',
+    permanentAddress: '12 Lake Road, Kochi', idType: 'AADHAAR', idNumber: '123456789012',
+    emergencyName: 'Ravi Iyer', emergencyRelation: 'Father', emergencyPhone: '9845011111'
+  });
+});
