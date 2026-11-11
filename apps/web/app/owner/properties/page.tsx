@@ -105,7 +105,8 @@ function UnitCard({ u, onMoveIn, onEdit }: { u: Unit; onMoveIn: () => void; onEd
   return (
     <div className="card">
       <div className="row between" style={{ alignItems: 'flex-start' }}>
-        <div><div className="eyebrow row" style={{ gap: 5 }}><Icon name="building" size={12} />{u.property.name}</div><Link href={`/owner/units/${u.id}`} className="h2">{u.name}</Link></div>
+        <div><div className="eyebrow row" style={{ gap: 5 }}><Icon name="building" size={12} />{u.property.name}</div><div className="row" style={{ gap: 2 }}><Link href={`/owner/units/${u.id}`} className="h2">{u.name}</Link>
+          <button className="icon-btn" style={{ width: 30, height: 30, borderRadius: 8, color: 'var(--muted)' }} onClick={onEdit} aria-label={`Edit ${u.name}`} title="Edit unit"><Icon name="edit" size={15} /></button></div></div>
         {u.status === 'VACANT' ? <span className="pill dot p-info">Vacant</span> : inv ? <InvoicePill inv={inv} /> : <span className="pill dot p-good">Paid</span>}
       </div>
       <div className="unit-body">
@@ -121,18 +122,15 @@ function UnitCard({ u, onMoveIn, onEdit }: { u: Unit; onMoveIn: () => void; onEd
             <div className="muted sm">Ready to let · deposit {formatINR(u.deposit)}</div></div>
         )}
       </div>
-      <div className="row between wrap">
+      <div className="row between">
         <div>
           <div className="eyebrow" style={inv?.status === 'OVERDUE' ? { color: 'var(--bad)' } : undefined}>{u.status === 'VACANT' ? 'Target rent' : inv ? 'Balance due' : 'Current rent'}</div>
           <div className="mid num" style={{ fontSize: 18 }}>{formatINR(inv?.amount ?? u.rent)}<span className="muted sm" style={{ fontWeight: 500 }}> /mo</span></div>
         </div>
-        <div className="row" style={{ gap: 6 }}>
-        <button className="btn btn-line btn-sm" onClick={onEdit} aria-label={`Edit ${u.name}`} title="Edit unit"><Icon name="edit" size={15} />Edit</button>
         {u.status === 'VACANT' ? (
           u.pendingApplications ? <Link className="btn btn-primary btn-sm" href={`/owner/applications?unitId=${u.id}`}><Icon name="users" size={15} />Review ({u.pendingApplications})</Link>
             : <button className="btn btn-primary btn-sm" onClick={onMoveIn}><Icon name="plus" size={15} />Add tenant</button>
         ) : <Link className="btn btn-soft btn-sm" href={`/owner/units/${u.id}`}><Icon name="file" size={15} />Lease & ledger</Link>}
-        </div>
       </div>
     </div>
   );
