@@ -52,6 +52,7 @@ dashboard.get('/', requireRole('OWNER', 'MANAGER'), handle(async (req): Promise<
       unit: { id: l.unit.id, name: l.unit.name },
       property: { id: l.unit.property.id, name: l.unit.property.name },
       tenant: { id: l.tenant.id, name: l.tenant.name },
+      rent: l.rent,
       endDate: l.endDate.toISOString(),
       daysLeft: daysBetween(now, l.endDate)
     }))

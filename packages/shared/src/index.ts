@@ -89,7 +89,7 @@ export interface Unit {
   pendingApplications: number;
 }
 
-export interface ExpiringLease { leaseId: string; unit: Ref; property: Ref; tenant: Ref; endDate: string; daysLeft: number }
+export interface ExpiringLease { leaseId: string; unit: Ref; property: Ref; tenant: Ref; rent: number; endDate: string; daysLeft: number }
 
 export interface Dashboard {
   period: string;
