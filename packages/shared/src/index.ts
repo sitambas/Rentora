@@ -93,7 +93,7 @@ export interface Lease {
   coTenantNames: string[];
   occupants: number;
   notes: string | null;
-  tenant: Ref & { phone: string };
+  tenant: Ref & { phone: string; loginEnabled: boolean };
   tenantDetails: TenantDetails;
 }
 

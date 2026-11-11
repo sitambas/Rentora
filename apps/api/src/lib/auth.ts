@@ -23,6 +23,8 @@ export function signToken(user: { id: string; role: Role }) {
 }
 
 /** Rejects requests without a valid bearer token; loads the user so deleted accounts lose access. */
+export const DISABLED_MESSAGE = 'Your Rentora login has been turned off. Contact your landlord or property manager.';
+
 export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   try {
     const header = req.headers.authorization ?? '';
@@ -34,9 +36,10 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     } catch {
       throw new HttpError(401, 'Your session has expired. Sign in again.');
     }
-    const user = await db.user.findUnique({ where: { id: String(payload.sub) }, select: { id: true, role: true, name: true } });
+    const user = await db.user.findUnique({ where: { id: String(payload.sub) }, select: { id: true, role: true, name: true, disabledAt: true } });
     if (!user) throw new HttpError(401, 'This account no longer exists.');
-    req.user = user;
+    if (user.disabledAt) throw new HttpError(401, DISABLED_MESSAGE);
+    req.user = { id: user.id, role: user.role, name: user.name };
     next();
   } catch (e) {
     next(e);

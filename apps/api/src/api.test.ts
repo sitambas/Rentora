@@ -182,3 +182,41 @@ test('adding a tenant stores their details; ID is masked in lists and full on th
     emergencyName: 'Ravi Iyer', emergencyRelation: 'Father', emergencyPhone: '9845011111'
   });
 });
+
+test('owner turns a tenant login off and on, then removes the tenant; re-adding restores access', async () => {
+  const login = (phone: string, password = 'demo1234') => call('POST', '/auth/login', { body: { phone, password } });
+  const { data: units } = await call('GET', '/units?q=Sophia', { as: 'owner' });
+  const unit = units[0];
+  const leaseId = unit.lease.id;
+  const sophia = await login('9876500012');
+  tokens.sophia = sophia.data.token;
+  assert.equal((await call('GET', '/home', { as: 'sophia' })).status, 200);
+
+  // Managers can't touch leases outside their properties.
+  assert.equal((await call('POST', `/leases/${leaseId}/login`, { as: 'manager', body: { enabled: false } })).status, 404);
+  assert.equal((await call('POST', `/leases/${leaseId}/login`, { as: 'tenant', body: { enabled: false } })).status, 403);
+
+  assert.equal((await call('POST', `/leases/${leaseId}/login`, { as: 'owner', body: { enabled: false } })).status, 200);
+  assert.equal((await call('GET', '/home', { as: 'sophia' })).status, 401, 'existing session stops working');
+  const blocked = await login('9876500012');
+  assert.equal(blocked.status, 403);
+  assert.match(blocked.data.error, /turned off/);
+  const { data: listed } = await call('GET', '/units?q=Sophia', { as: 'owner' });
+  assert.equal(listed[0].lease.tenant.loginEnabled, false);
+  assert.equal(listed[0].status, 'OCCUPIED', 'lease is untouched');
+
+  assert.equal((await call('POST', `/leases/${leaseId}/login`, { as: 'owner', body: { enabled: true } })).status, 200);
+  assert.equal((await login('9876500012')).status, 200);
+
+  assert.equal((await call('POST', `/leases/${leaseId}/end`, { as: 'owner', body: { disableLogin: true } })).status, 200);
+  assert.equal((await login('9876500012')).status, 403);
+  const { data: after } = await call('GET', `/units/${unit.id}`, { as: 'owner' });
+  assert.equal(after.status, 'VACANT');
+  assert.ok(after.invoices.length > 0, 'payment history is kept');
+  assert.equal((await call('POST', `/leases/${leaseId}/login`, { as: 'owner', body: { enabled: true } })).status, 409);
+
+  const back = await call('POST', '/leases', { as: 'owner', body: { unitId: unit.id, name: 'Sophia Lin', phone: '9876500012', startDate: '2026-12-01', months: 11, rent: 42000, deposit: 84000 } });
+  assert.equal(back.status, 200);
+  assert.equal(back.data.tempPassword, null, 'returning tenant keeps their password');
+  assert.equal((await login('9876500012')).status, 200);
+});

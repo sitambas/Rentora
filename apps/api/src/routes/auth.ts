@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { normalizePhone, type User } from '@rentora/shared';
 import { db } from '../db';
-import { checkPassword, hashPassword, me, requireAuth, signToken } from '../lib/auth';
+import { DISABLED_MESSAGE, checkPassword, hashPassword, me, requireAuth, signToken } from '../lib/auth';
 import { HttpError, badRequest, conflict, handle, parse } from '../lib/http';
 
 export const auth = Router();
@@ -22,6 +22,7 @@ auth.post('/login', handle(async req => {
   if (!user || !(await checkPassword(body.password, user.passwordHash))) {
     throw new HttpError(401, 'That mobile number and password do not match.');
   }
+  if (user.disabledAt) throw new HttpError(403, DISABLED_MESSAGE);
   return { token: signToken(user), user: toUser(user) };
 }));
 

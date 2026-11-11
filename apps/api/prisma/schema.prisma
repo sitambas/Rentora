@@ -60,6 +60,8 @@ model User {
   passwordHash String
   role         Role
   createdAt    DateTime @default(now())
+  /// Set when an owner or manager turns off this tenant's login. Signed-in sessions stop working too.
+  disabledAt   DateTime?
 
   // Tenant profile, filled in by the owner or manager when they add a tenant.
   dateOfBirth       DateTime?

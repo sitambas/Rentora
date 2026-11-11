@@ -94,14 +94,26 @@ leases.post('/:id/renew', staff, handle(async req => {
 }));
 
 leases.post('/:id/end', staff, handle(async req => {
+  const { disableLogin } = parse(z.object({ disableLogin: z.boolean().default(false) }), req.body ?? {});
   const lease = await staffLease(req);
   if (lease.status !== 'ACTIVE') throw conflict('This lease has already ended.');
+  await notify([lease.tenantId], { title: 'Lease ended', body: `Your lease for ${lease.unit.name} has been closed.`, tone: 'info' });
   await db.$transaction([
     db.lease.update({ where: { id: lease.id }, data: { status: 'ENDED', endDate: new Date() } }),
-    db.unit.update({ where: { id: lease.unitId }, data: { status: 'VACANT' } })
+    db.unit.update({ where: { id: lease.unitId }, data: { status: 'VACANT' } }),
+    // Removing a tenant also turns off their login; payment history stays.
+    ...(disableLogin ? [db.user.update({ where: { id: lease.tenantId }, data: { disabledAt: new Date() } })] : [])
   ]);
-  await notify([lease.tenantId], { title: 'Lease ended', body: `Your lease for ${lease.unit.name} has been closed.`, tone: 'info' });
   return { ok: true };
+}));
+
+/** Turns a tenant's login off or back on. The lease and bills are untouched. */
+leases.post('/:id/login', staff, handle(async req => {
+  const { enabled } = parse(z.object({ enabled: z.boolean({ required_error: 'Say whether the login should be on or off.' }) }), req.body);
+  const lease = await staffLease(req);
+  if (lease.status !== 'ACTIVE') throw conflict('This lease has ended. Add the tenant to a unit again to give them access.');
+  await db.user.update({ where: { id: lease.tenantId }, data: { disabledAt: enabled ? null : new Date() } });
+  return { loginEnabled: enabled };
 }));
 
 leases.patch('/mine', requireRole('TENANT'), handle(async req => {

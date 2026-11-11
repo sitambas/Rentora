@@ -77,7 +77,7 @@ export const toLease = (l: LeaseRow): Lease => ({
   coTenantNames: l.coTenantNames,
   occupants: l.occupants,
   notes: l.notes,
-  tenant: { id: l.tenant.id, name: l.tenant.name, phone: l.tenant.phone },
+  tenant: { id: l.tenant.id, name: l.tenant.name, phone: l.tenant.phone, loginEnabled: !l.tenant.disabledAt },
   tenantDetails: tenantDetails(l.tenant, false)
 });
 
@@ -193,10 +193,10 @@ export async function moveIn(input: {
       data: { name: input.name, phone: input.phone, email: input.email ?? null, role: 'TENANT', passwordHash: await hash(temp), ...input.profile }
     });
     if (input.password) temp = null;
-  } else if (input.profile || input.email) {
-    // A returning tenant: keep their account, refresh whatever details were given this time.
+  } else {
+    // A returning tenant: keep their account, turn their login back on, refresh whatever details were given this time.
     const given = Object.fromEntries(Object.entries({ email: input.email, ...input.profile }).filter(([, v]) => v != null && v !== ''));
-    if (Object.keys(given).length) tenant = await db.user.update({ where: { id: tenant.id }, data: given });
+    tenant = await db.user.update({ where: { id: tenant.id }, data: { ...given, disabledAt: null } });
   }
 
   const endDate = new Date(input.startDate);
