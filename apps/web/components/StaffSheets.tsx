@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { ID_TYPES, PAYMENT_METHODS, formatDate, formatINR, periodLabel, type IdType, type Invoice, type PaymentMethod, type Property, type Unit } from '@rentora/shared';
-import { api } from '@/lib/api';
+import { DOCUMENT_MAX_BYTES, DOCUMENT_TYPES, ID_TYPES, PAYMENT_METHODS, formatBytes, formatDate, formatINR, periodLabel, type IdType, type Invoice, type PaymentMethod, type Property, type Unit } from '@rentora/shared';
+import { api, uploadDocument } from '@/lib/api';
 import { useAction, useQuery } from '@/lib/hooks';
 import { Field, Icon, Sheet, Skeleton, useToast } from './ui';
 
@@ -154,7 +154,9 @@ export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: (
   const [f, setF] = useState({ ...BLANK_TENANT, startDate: today(), rent: unit ? String(unit.rent) : '', deposit: unit ? String(unit.deposit) : '' });
   const [coTenants, setCoTenants] = useState<string[]>([]);
   const [err, setErr] = useState('');
-  const [done, setDone] = useState<{ phone: string; tempPassword: string | null } | null>(null);
+  const [done, setDone] = useState<{ phone: string; tempPassword: string | null; failed: string[] } | null>(null);
+  const [agreement, setAgreement] = useState<File[]>([]);
+  const [aadhaar, setAadhaar] = useState<File[]>([]);
   const set = (k: keyof typeof f, digits = false) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: digits ? e.target.value.replace(/\D/g, '') : e.target.value });
 
@@ -171,7 +173,7 @@ export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: (
     if (!chosen) { setErr('Choose the unit the tenant is moving into.'); return; }
     run(async () => {
       const names = coTenants.map(n => n.trim()).filter(Boolean);
-      const r = await api<{ tempPassword: string | null }>('/leases', {
+      const r = await api<{ leaseId: string; tempPassword: string | null }>('/leases', {
         body: {
           unitId: chosen.id, name: f.name, phone: f.phone, email: f.email.trim() || null,
           dateOfBirth: f.dateOfBirth || null, occupation: f.occupation, employer: f.employer, permanentAddress: f.permanentAddress,
@@ -180,9 +182,17 @@ export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: (
           coTenantNames: names
         }
       });
+      // The lease exists now; upload the files one by one and report any that fail instead of undoing the move-in.
+      const failed: string[] = [];
+      for (const [kind, files] of [['AGREEMENT', agreement], ['ID_PROOF', aadhaar]] as const) {
+        for (const file of files) {
+          try { await uploadDocument(r.leaseId, kind, file); }
+          catch (e) { failed.push(`${file.name}: ${(e as Error).message}`); }
+        }
+      }
       toast(`${f.name} moved in to ${chosen.name}`);
       onDone();
-      if (r.tempPassword) setDone({ phone: f.phone, tempPassword: r.tempPassword }); else onClose();
+      if (r.tempPassword || failed.length) setDone({ phone: f.phone, tempPassword: r.tempPassword, failed }); else onClose();
     }, setErr);
   };
 
@@ -191,7 +201,17 @@ export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: (
 
   return (
     <Sheet title={unit ? `Add tenant · ${unit.name}` : 'Add a tenant'} onClose={onClose}>
-      {done?.tempPassword ? <><TempPasswordNote phone={done.phone} password={done.tempPassword} /><button className="btn btn-primary" onClick={onClose}>Done</button></> : (
+      {done ? <>
+        {done.failed.length > 0 && (
+          <div className="alert warn" role="alert">
+            <b>{done.failed.length === 1 ? 'One document' : `${done.failed.length} documents`} didn’t upload</b>
+            <ul className="muted sm" style={{ margin: 0, paddingLeft: 18 }}>{done.failed.map(m => <li key={m}>{m}</li>)}</ul>
+            <span className="muted sm">The tenant was added. Upload these from the unit page under Documents.</span>
+          </div>
+        )}
+        {done.tempPassword && <TempPasswordNote phone={done.phone} password={done.tempPassword} />}
+        <button className="btn btn-primary" onClick={onClose}>Done</button>
+      </> : (
         !unit && !vacant.data ? <Skeleton /> : !unit && options.length === 0 ? (
           <div className="empty">Every unit has a tenant. Add a unit on the Properties page first.</div>
         ) : (
@@ -256,12 +276,16 @@ export function MoveInSheet({ unit, onClose, onDone }: { unit?: Unit; onClose: (
                 <Icon name="plus" size={15} />Add co-tenant</button>
             )}
           </div>
+          <div className="eyebrow">Documents</div>
+          <FilePick id="fa" label="Rental agreement" hint="Signed agreement as a PDF or photos of each page." files={agreement} onChange={setAgreement} />
+          <FilePick id="fi" label="Aadhaar card" hint="Front and back, as photos or a PDF." files={aadhaar} onChange={setAadhaar} />
+
           <Field label="Notes" id="mn" hint="Optional. Only you and your managers see this.">
             <textarea id="mn" className="input" rows={2} placeholder="Pets, parking slot, police verification status…" value={f.notes} onChange={set('notes')} />
           </Field>
 
           {err && <div className="err" role="alert">{err}</div>}
-          <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Adding…' : 'Add tenant & create lease'}</button>
+          <button className="btn btn-primary btn-block" disabled={busy}>{busy ? (agreement.length + aadhaar.length ? 'Adding and uploading…' : 'Adding…') : 'Add tenant & create lease'}</button>
         </form>
         )
       )}
@@ -294,5 +318,46 @@ export function RenewSheet({ leaseId, tenant, rent, endDate, onClose, onDone }: 
         <button className="btn btn-primary btn-block" disabled={busy}>Renew lease</button>
       </form>
     </Sheet>
+  );
+}
+
+/** Checks a file before upload; returns a message when it can't be used. */
+export function fileProblem(file: File): string | null {
+  if (!(DOCUMENT_TYPES as readonly string[]).includes(file.type)) return `${file.name} isn’t a PDF or photo (JPG, PNG, WebP).`;
+  if (file.size > DOCUMENT_MAX_BYTES) return `${file.name} is ${formatBytes(file.size)}. The limit is ${formatBytes(DOCUMENT_MAX_BYTES)}.`;
+  return null;
+}
+
+/** Lets the owner pick one or more files and shows them before they are uploaded. */
+export function FilePick({ id, label, hint, files, onChange, max = 5 }: { id: string; label: string; hint?: string; files: File[]; onChange: (f: File[]) => void; max?: number }) {
+  const [problem, setProblem] = useState('');
+  const add = (list: FileList | null) => {
+    const picked = Array.from(list ?? []);
+    const bad = picked.map(fileProblem).filter(Boolean);
+    const good = picked.filter(f => !fileProblem(f));
+    const next = [...files, ...good].slice(0, max);
+    setProblem([...bad, files.length + good.length > max ? `Up to ${max} files here.` : ''].filter(Boolean).join(' '));
+    onChange(next);
+  };
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {files.map((f, i) => (
+        <div key={`${f.name}-${i}`} className="row" style={{ gap: 8 }}>
+          <Icon name="file" size={16} />
+          <span className="grow ell sm">{f.name}</span>
+          <span className="muted sm">{formatBytes(f.size)}</span>
+          <button type="button" className="icon-btn" style={{ width: 30, height: 30 }} aria-label={`Remove ${f.name}`} onClick={() => onChange(files.filter((_, j) => j !== i))}><Icon name="x" size={14} /></button>
+        </div>
+      ))}
+      {files.length < max && (
+        <label className="btn btn-line btn-sm" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
+          <Icon name="plus" size={15} />{files.length ? 'Add another file' : 'Choose file'}
+          <input id={id} type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" className="sr-only"
+            onChange={e => { add(e.target.files); e.target.value = ''; }} />
+        </label>
+      )}
+      {problem ? <span className="err sm">{problem}</span> : hint && <span className="hint">{hint}</span>}
+    </div>
   );
 }

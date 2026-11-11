@@ -35,6 +35,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(400).json({ error: 'Invalid request.', details: err.flatten() });
     return;
   }
+  if (typeof err === 'object' && err && (err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: 'That file is too large. The limit is 10 MB.' });
+    return;
+  }
   if (err instanceof SyntaxError && 'body' in err) {
     res.status(400).json({ error: 'Request body is not valid JSON.' });
     return;

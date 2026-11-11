@@ -220,3 +220,44 @@ test('owner turns a tenant login off and on, then removes the tenant; re-adding 
   assert.equal(back.data.tempPassword, null, 'returning tenant keeps their password');
   assert.equal((await login('9876500012')).status, 200);
 });
+
+test('lease documents: owner uploads, tenant can view their own, others are refused, fakes and big files rejected', async () => {
+  const upload = (as: string, leaseId: string, kind: string, name: string, bytes: Buffer, type = 'application/pdf') =>
+    fetch(`${base}/documents?${new URLSearchParams({ leaseId, kind, name })}`, {
+      method: 'POST', headers: { authorization: `Bearer ${tokens[as]}`, 'content-type': type }, body: new Uint8Array(bytes)
+    }).then(async r => ({ status: r.status, data: await r.json() }));
+  const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(2000, 32)]);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+  const { data: home } = await call('GET', '/home', { as: 'tenant' });
+  const leaseId = home.lease.id;
+
+  const agreement = await upload('owner', leaseId, 'AGREEMENT', 'Agreement 2026.pdf', pdf);
+  assert.equal(agreement.status, 200, JSON.stringify(agreement.data));
+  assert.equal(agreement.data.mimeType, 'application/pdf');
+  const aadhaar = await upload('manager', leaseId, 'ID_PROOF', '../../aadhaar front', png, 'image/png');
+  assert.equal(aadhaar.status, 200);
+  assert.equal(aadhaar.data.fileName, 'aadhaar front.png', 'path characters stripped, extension added');
+
+  const fake = await upload('owner', leaseId, 'OTHER', 'virus.pdf', Buffer.from('<script>alert(1)</script>'));
+  assert.equal(fake.status, 400);
+  assert.equal((await upload('owner', leaseId, 'OTHER', 'big.pdf', Buffer.concat([pdf, Buffer.alloc(11 * 1024 * 1024)]))).status, 413);
+  assert.equal((await upload('tenant', leaseId, 'OTHER', 'mine.pdf', pdf)).status, 403, 'tenants cannot upload');
+
+  const { data: list } = await call('GET', `/documents?leaseId=${leaseId}`, { as: 'tenant' });
+  assert.equal(list.length, 2);
+  const file = await fetch(`${base}/documents/${agreement.data.id}/file`, { headers: { authorization: `Bearer ${tokens.tenant}` } });
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get('content-type'), 'application/pdf');
+  assert.ok(Buffer.from(await file.arrayBuffer()).equals(pdf));
+
+  // Another tenant can't see Elena's documents.
+  const { data: other } = await call('POST', '/auth/login', { body: { phone: '9876500011', password: 'demo1234' } });
+  tokens.other = other.token;
+  assert.equal((await call('GET', `/documents?leaseId=${leaseId}`, { as: 'other' })).status, 404);
+  assert.equal((await fetch(`${base}/documents/${agreement.data.id}/file`, { headers: { authorization: `Bearer ${tokens.other}` } })).status, 404);
+
+  assert.equal((await call('DELETE', `/documents/${aadhaar.data.id}`, { as: 'tenant' })).status, 403);
+  assert.equal((await call('DELETE', `/documents/${aadhaar.data.id}`, { as: 'owner' })).status, 200);
+  assert.equal((await call('GET', `/documents?leaseId=${leaseId}`, { as: 'owner' })).data.length, 1);
+});

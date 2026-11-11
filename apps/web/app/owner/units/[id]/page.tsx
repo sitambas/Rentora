@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { use, useState } from 'react';
-import { ID_TYPES, formatDate, formatINR, periodLabel, type Invoice, type Lease, type Ticket, type Unit } from '@rentora/shared';
-import { api } from '@/lib/api';
+import { DOCUMENT_KINDS, ID_TYPES, formatBytes, formatDate, type DocumentKind, type TenantDocument, formatINR, periodLabel, type Invoice, type Lease, type Ticket, type Unit } from '@rentora/shared';
+import { api, openDocument, uploadDocument } from '@/lib/api';
 import { useAction, useQuery } from '@/lib/hooks';
-import { EditUnitSheet, MoveInSheet, RecordPaymentSheet, RenewSheet } from '@/components/StaffSheets';
+import { EditUnitSheet, fileProblem, MoveInSheet, RecordPaymentSheet, RenewSheet } from '@/components/StaffSheets';
 import { Avatar, BuildingArt, ErrorCard, Icon, InvoicePill, Sheet, Skeleton, TicketPill, useToast } from '@/components/ui';
 
 type Detail = Unit & { invoices: Invoice[]; tickets: Ticket[] };
@@ -84,6 +84,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
         </div>
 
         <div className="stack">
+          {lease && <DocumentsCard leaseId={lease.id} />}
           <div className="card">
             <div className="eyebrow">Ledger</div>
             {u.invoices.length === 0 ? <div className="empty">No invoices yet.</div> : (
@@ -142,5 +143,78 @@ function TenantDetailsCard({ lease }: { lease: Lease }) {
         {shown.map(([k, v]) => <div key={k} className="row between" style={{ alignItems: 'flex-start', gap: 16 }}><span className="muted">{k}</span><span style={{ textAlign: 'right', overflowWrap: 'anywhere' }}>{v}</span></div>)}
       </div>
     </details>
+  );
+}
+
+function DocumentsCard({ leaseId }: { leaseId: string }) {
+  const docs = useQuery<TenantDocument[]>(`/documents?leaseId=${leaseId}`);
+  const toast = useToast();
+  const [kind, setKind] = useState<DocumentKind>('AGREEMENT');
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<TenantDocument | null>(null);
+  const { busy, run } = useAction();
+
+  const upload = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    let ok = 0;
+    for (const file of files) {
+      const problem = fileProblem(file);
+      if (problem) { toast(problem, 'bad'); continue; }
+      try { await uploadDocument(leaseId, kind, file); ok++; }
+      catch (e) { toast(`${file.name}: ${(e as Error).message}`, 'bad'); }
+    }
+    setUploading(false);
+    if (ok) { toast(ok === 1 ? 'Document uploaded' : `${ok} documents uploaded`); docs.reload(); }
+  };
+  const open = (d: TenantDocument) => openDocument(d.id, d.fileName).catch(e => toast((e as Error).message, 'bad'));
+  const remove = () => run(async () => {
+    await api(`/documents/${deleting!.id}`, { method: 'DELETE' });
+    toast(`${deleting!.fileName} deleted`); setDeleting(null); docs.reload();
+  }, m => toast(m, 'bad'));
+
+  const list = docs.data ?? [];
+  return (
+    <div className="card">
+      <div className="row between"><span className="eyebrow">Documents</span><span className="muted sm">{list.length ? `${list.length} file${list.length === 1 ? '' : 's'}` : ''}</span></div>
+      {docs.error && !docs.data ? <div className="err">{docs.error}</div> : !docs.data ? <Skeleton h={60} /> : list.length === 0 ? (
+        <div className="empty">No agreement or ID proof uploaded yet.</div>
+      ) : (
+        <div className="list">
+          {list.map(d => (
+            <div key={d.id} className="li">
+              <Icon name="file" />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <button className="h3 ell link" style={{ display: 'block', maxWidth: '100%', fontSize: 14, textAlign: 'left' }} onClick={() => open(d)}>{d.fileName}</button>
+                <div className="muted sm">{DOCUMENT_KINDS[d.kind]} · {formatBytes(d.size)} · {formatDate(d.createdAt)}</div>
+              </div>
+              <button className="icon-btn" aria-label={`Delete ${d.fileName}`} title="Delete" onClick={() => setDeleting(d)}><Icon name="x" size={16} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="row wrap" style={{ gap: 8 }}>
+        <div className="input" style={{ flex: '1 1 180px', minHeight: 36 }}>
+          <select aria-label="Document type" value={kind} onChange={e => setKind(e.target.value as DocumentKind)} style={{ height: 34 }}>
+            {(Object.entries(DOCUMENT_KINDS) as [DocumentKind, string][]).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </div>
+        <label className="btn btn-soft btn-sm" style={{ cursor: uploading ? 'progress' : 'pointer', opacity: uploading ? .6 : 1 }}>
+          <Icon name="plus" size={15} />{uploading ? 'Uploading…' : 'Upload'}
+          <input type="file" multiple disabled={uploading} accept="application/pdf,image/jpeg,image/png,image/webp" className="sr-only"
+            onChange={e => { upload(e.target.files); e.target.value = ''; }} />
+        </label>
+      </div>
+      <div className="hint">PDF or photo (JPG, PNG, WebP), up to 10 MB each. Only you, your managers and the tenant can open these.</div>
+
+      {deleting && (
+        <Sheet title="Delete this document?" onClose={() => setDeleting(null)}>
+          <p className="muted" style={{ margin: 0 }}><b>{deleting.fileName}</b> ({DOCUMENT_KINDS[deleting.kind]}) will be permanently deleted. This can’t be undone.</p>
+          <div className="row"><button className="btn btn-line grow" onClick={() => setDeleting(null)}>Keep it</button>
+            <button className="btn btn-danger grow" disabled={busy} onClick={remove}>{busy ? 'Deleting…' : 'Delete'}</button></div>
+        </Sheet>
+      )}
+    </div>
   );
 }

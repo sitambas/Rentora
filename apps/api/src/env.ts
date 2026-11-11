@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 function required(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing environment variable ${name}. Copy apps/api/.env.example to apps/api/.env.`);
@@ -9,5 +12,8 @@ export const env = {
   jwtSecret: required('JWT_SECRET'),
   port: Number(process.env.PORT ?? 4000),
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(',').map(s => s.trim()).filter(Boolean),
-  production: process.env.NODE_ENV === 'production'
+  production: process.env.NODE_ENV === 'production',
+  /** Where uploaded lease documents are stored. Tests use a throwaway folder. */
+  uploadsDir: process.env.UPLOADS_DIR
+    ?? (process.env.NODE_ENV === 'test' ? join(tmpdir(), 'rentora-test-uploads') : join(process.cwd(), 'uploads'))
 };

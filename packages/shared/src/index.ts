@@ -97,6 +97,27 @@ export interface Lease {
   tenantDetails: TenantDetails;
 }
 
+export const DOCUMENT_KINDS = { AGREEMENT: 'Rental agreement', ID_PROOF: 'ID proof (Aadhaar)', OTHER: 'Other document' } as const;
+export type DocumentKind = keyof typeof DOCUMENT_KINDS;
+/** File types the API accepts for lease documents, and the size limit. */
+export const DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+export interface TenantDocument {
+  id: string;
+  leaseId: string;
+  kind: DocumentKind;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  uploadedBy: Ref;
+}
+
+export function formatBytes(n: number): string {
+  return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 /** Shows only the last 4 characters of an ID number. */
 export function maskId(id: string): string {
   const clean = id.replace(/\s/g, '');

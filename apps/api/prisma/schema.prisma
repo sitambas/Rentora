@@ -79,6 +79,7 @@ model User {
   leases            Lease[]
   tickets           MaintenanceTicket[]
   sentMessages      Message[]            @relation("MessageSender")
+  uploadedDocuments Document[]
   receivedMessages  Message[]            @relation("MessageRecipient")
   notifications     Notification[]
 }
@@ -134,9 +135,10 @@ model Lease {
   status        LeaseStatus @default(ACTIVE)
   createdAt     DateTime    @default(now())
 
-  unit     Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  tenant   User      @relation(fields: [tenantId], references: [id])
-  invoices Invoice[]
+  unit      Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenant    User       @relation(fields: [tenantId], references: [id])
+  invoices  Invoice[]
+  documents Document[]
 
   @@index([unitId, status])
   @@index([tenantId, status])
@@ -250,4 +252,29 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+}
+
+enum DocumentKind {
+  AGREEMENT
+  ID_PROOF
+  OTHER
+}
+
+/// A file attached to a lease: the rental agreement, the tenant's Aadhaar card, and so on.
+/// The bytes live in UPLOADS_DIR under `storageKey`; only staff for the property and the tenant can read them.
+model Document {
+  id           String       @id @default(cuid())
+  leaseId      String
+  kind         DocumentKind
+  fileName     String
+  mimeType     String
+  size         Int
+  storageKey   String       @unique
+  uploadedById String
+  createdAt    DateTime     @default(now())
+
+  lease      Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@index([leaseId])
 }

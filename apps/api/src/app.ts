@@ -11,6 +11,7 @@ import { properties, units } from './routes/properties';
 import { invoices, leases } from './routes/billing';
 import { applications, notices, parcels, tickets } from './routes/community';
 import { home, messages, notifications } from './routes/people';
+import { documents } from './routes/documents';
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   app.use('/properties', properties);
   app.use('/units', units);
   app.use('/leases', leases);
+  app.use('/documents', documents);
   app.use('/invoices', invoices);
   app.use('/tickets', tickets);
   app.use('/notices', notices);

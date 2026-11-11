@@ -11,3 +11,6 @@ apps/mobile/android/
 npm-debug.log*
 
 .env.test
+
+# Uploaded lease documents (tenant ID proofs, agreements)
+apps/api/uploads/
