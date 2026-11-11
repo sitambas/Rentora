@@ -129,7 +129,11 @@ units.post('/', staff, handle(async req => {
 
 units.patch('/:id', staff, handle(async req => {
   const body = parse(unitBody.omit({ propertyId: true }).partial(), req.body);
-  await unitForUser(me(req), req.params.id);
+  const current = await unitForUser(me(req), req.params.id);
+  if (body.name && body.name !== current.name) {
+    const clash = await db.unit.findUnique({ where: { propertyId_name: { propertyId: current.propertyId, name: body.name } } });
+    if (clash) throw conflict(`This property already has a unit called ${body.name}.`);
+  }
   const u = await db.unit.update({ where: { id: req.params.id }, data: body, include: unitInclude });
   return toUnit(u);
 }));

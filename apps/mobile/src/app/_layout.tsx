@@ -27,6 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
           <Stack.Screen name="account" options={{ title: 'Account' }} />
           <Stack.Screen name="add-unit" options={{ title: 'Add a unit', presentation: 'modal' }} />
+          <Stack.Screen name="edit-unit/[id]" options={{ title: 'Edit unit', presentation: 'modal' }} />
           <Stack.Screen name="new-request" options={{ title: 'New request', presentation: 'modal' }} />
           <Stack.Screen name="post-notice" options={{ title: 'Post a notice', presentation: 'modal' }} />
         </Stack>

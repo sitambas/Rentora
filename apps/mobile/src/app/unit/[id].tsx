@@ -1,9 +1,9 @@
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { formatDate, formatINR, periodLabel, type Invoice, type Ticket, type Unit } from '@/lib/shared';
 import { useQuery } from '@/lib/hooks';
 import { recordPayment, sendReminder } from '@/lib/actions';
-import { Avatar, Button, Card, Divider, Empty, InvoicePill, Load, Row, Screen, T, TicketPill, useColors } from '@/components/ui';
+import { Avatar, Button, Card, Divider, Empty, Icon, InvoicePill, Load, Row, Screen, T, TicketPill, useColors } from '@/components/ui';
 
 type Detail = Unit & { invoices: Invoice[]; tickets: Ticket[] };
 
@@ -18,7 +18,14 @@ export default function UnitScreen() {
       <Load q={q}>{u => {
         const lease = u.lease, inv = u.openInvoice;
         return <>
-          <Stack.Screen options={{ title: `${u.name} · ${u.property.name}` }} />
+          <Stack.Screen options={{
+            title: `${u.name} · ${u.property.name}`,
+            headerRight: () => (
+              <Pressable onPress={() => router.push(`/edit-unit/${u.id}`)} hitSlop={10} accessibilityLabel="Edit unit">
+                <Icon name="create-outline" size={22} color={c.brand} />
+              </Pressable>
+            )
+          }} />
           {lease ? (
             <Card>
               <Row><Avatar name={lease.tenant.name} size={46} />

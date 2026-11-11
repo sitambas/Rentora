@@ -97,6 +97,34 @@ export function AddUnitSheet({ onClose, onDone, propertyId }: { onClose: () => v
   );
 }
 
+export function EditUnitSheet({ unit, onClose, onDone }: { unit: Unit; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { busy, run } = useAction();
+  const [f, setF] = useState({ name: unit.name, rent: String(unit.rent), deposit: String(unit.deposit) });
+  const [err, setErr] = useState('');
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    run(async () => {
+      await api<Unit>(`/units/${unit.id}`, { method: 'PATCH', body: { name: f.name, rent: f.rent, deposit: f.deposit || 0 } });
+      toast('Unit updated'); onDone(); onClose();
+    }, setErr);
+  };
+  return (
+    <Sheet title={`Edit ${unit.name}`} onClose={onClose}>
+      <form className="stack" onSubmit={submit}>
+        <Field label="Unit name" id="eun"><div className="input"><input id="eun" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div></Field>
+        <div className="grid2">
+          <Field label="Rent / month (₹)" id="eur"><div className="input"><input id="eur" inputMode="numeric" value={f.rent} onChange={e => setF({ ...f, rent: e.target.value.replace(/\D/g, '') })} /></div></Field>
+          <Field label="Deposit (₹)" id="eud"><div className="input"><input id="eud" inputMode="numeric" value={f.deposit} onChange={e => setF({ ...f, deposit: e.target.value.replace(/\D/g, '') })} /></div></Field>
+        </div>
+        {unit.lease && <div className="muted sm">New rent and deposit apply to the next lease. To change {unit.lease.tenant.name}’s rent, renew their lease.</div>}
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-primary btn-block" disabled={busy}>Save changes</button>
+      </form>
+    </Sheet>
+  );
+}
+
 /** Shows a new tenant's temporary password once, so the owner can pass it on. */
 export function TempPasswordNote({ phone, password }: { phone: string; password: string }) {
   const toast = useToast();

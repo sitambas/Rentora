@@ -130,3 +130,17 @@ test('messages only go to connected people', async () => {
   const marcus = await db.user.findFirstOrThrow({ where: { name: 'Marcus Vance' } });
   assert.equal((await call('POST', `/messages/${marcus.id}`, { as: 'tenant', body: { body: 'hi' } })).status, 403);
 });
+
+test('staff edit a unit; duplicate names and outsiders are refused', async () => {
+  const { data: list } = await call('GET', '/units?q=Apt 3A', { as: 'owner' });
+  const unit = list.find((u: { name: string }) => u.name === 'Apt 3A');
+  const edited = await call('PATCH', `/units/${unit.id}`, { as: 'owner', body: { name: 'Apt 3A-East', rent: '45000', deposit: 90000 } });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.name, 'Apt 3A-East');
+  assert.equal(edited.data.rent, 45000);
+  assert.equal(edited.data.lease.rent, 42000, 'the current lease keeps its rent');
+  assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'owner', body: { name: 'Apt 4B' } })).status, 409);
+  assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'owner', body: { rent: 0 } })).status, 400);
+  assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'manager', body: { rent: 1 } })).status, 403);
+  assert.equal((await call('PATCH', `/units/${unit.id}`, { as: 'tenant', body: { rent: 1 } })).status, 403);
+});

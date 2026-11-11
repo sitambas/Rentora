@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import { formatDate, formatINR, periodLabel, type Invoice, type Ticket, type Unit } from '@rentora/shared';
 import { api } from '@/lib/api';
 import { useAction, useQuery } from '@/lib/hooks';
-import { MoveInSheet, RecordPaymentSheet, RenewSheet } from '@/components/StaffSheets';
+import { EditUnitSheet, MoveInSheet, RecordPaymentSheet, RenewSheet } from '@/components/StaffSheets';
 import { Avatar, BuildingArt, ErrorCard, Icon, InvoicePill, Sheet, Skeleton, TicketPill, useToast } from '@/components/ui';
 
 type Detail = Unit & { invoices: Invoice[]; tickets: Ticket[] };
@@ -14,7 +14,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
   const q = useQuery<Detail>(`/units/${id}`);
   const toast = useToast();
   const { busy, run } = useAction();
-  const [sheet, setSheet] = useState<'record' | 'renew' | 'end' | 'movein' | null>(null);
+  const [sheet, setSheet] = useState<'record' | 'renew' | 'end' | 'movein' | 'edit' | null>(null);
 
   if (q.error && !q.data) return <ErrorCard message={q.error} onRetry={q.reload} />;
   if (!q.data) return <><Skeleton h={200} /><Skeleton h={160} /></>;
@@ -31,7 +31,10 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <>
-      <Link href="/owner/properties" className="row muted sm" style={{ gap: 6 }}><Icon name="back" size={15} />All properties</Link>
+      <div className="row between">
+        <Link href="/owner/properties" className="row muted sm" style={{ gap: 6 }}><Icon name="back" size={15} />All properties</Link>
+        <button className="btn btn-line btn-sm" onClick={() => setSheet('edit')}><Icon name="edit" size={15} />Edit unit</button>
+      </div>
       <div className="hero" style={{ aspectRatio: '21/7' }}>
         <BuildingArt seed={u.property.id} tall />
         <div className="hero-txt"><div className="grow"><div className="eyebrow" style={{ color: '#fff', opacity: .8 }}>{u.property.name}</div><div className="h1" style={{ color: '#fff' }}>{u.name}</div></div>
@@ -106,6 +109,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
 
       {sheet === 'record' && inv && <RecordPaymentSheet invoice={inv} onClose={() => setSheet(null)} onDone={q.reload} />}
       {sheet === 'renew' && lease && <RenewSheet leaseId={lease.id} tenant={lease.tenant.name} rent={lease.rent} endDate={lease.endDate} onClose={() => setSheet(null)} onDone={q.reload} />}
+      {sheet === 'edit' && <EditUnitSheet unit={u} onClose={() => setSheet(null)} onDone={q.reload} />}
       {sheet === 'movein' && <MoveInSheet unit={u} onClose={() => setSheet(null)} onDone={q.reload} />}
       {sheet === 'end' && lease && (
         <Sheet title="End this lease?" onClose={() => setSheet(null)}>
