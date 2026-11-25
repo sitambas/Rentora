@@ -94,6 +94,10 @@ Each active lease gets one invoice per month (`Invoice`, unique per lease and mo
 - **Mobile sign-in stores the token in the device keychain** (`expo-secure-store`). The web app keeps it in `localStorage`; move to an httpOnly cookie if the web app and API share a domain.
 - Set `CORS_ORIGINS` in `apps/api/.env` to your web app's real address.
 
+## Hosting
+
+`apps/api/Dockerfile` and `apps/web/Dockerfile` build production images from the repository root. [docs/deploy-coolify.md](docs/deploy-coolify.md) walks through running the database, API and web app on your own server with Coolify, including HTTPS, backups and rebuilding the Android app against the hosted API.
+
 ## Tests and checks
 
 ```bash

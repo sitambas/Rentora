@@ -1,0 +1,13 @@
+# Keep Docker builds small and free of secrets.
+**/node_modules
+**/.next
+**/.env
+**/.env.local
+**/.env.test
+**/*.tsbuildinfo
+.git
+.claude
+dist
+apps/mobile
+apps/api/uploads
+rentora.html
